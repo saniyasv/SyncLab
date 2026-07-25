@@ -1,0 +1,15 @@
+{
+  "name": "collabhub-backend",
+  "version": "1.0.0",
+  "description": "CollabHub backend — Supabase schema, migrations, and documentation",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.3"
+  }
+}
