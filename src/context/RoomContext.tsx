@@ -173,36 +173,48 @@ export function RoomProvider({ children }: { children: ReactNode }) {
   if (error) throw { message: error.message };
 
   return (data || []).map((m: any) => ({
-    id: m.id,
-    room_id: m.room_id,
-    user_id: m.user_id,
-    user_name: m.user?.name || "Unknown",
-    user_avatar: m.user?.avatar_url || null,
-    role: m.role,
-    joined_at: m.joined_at,
-    online: false,
-  }));
+  id: m.id,
+  room_id: m.room_id,
+  user_id: m.user_id,
+  user_name: m.profiles?.name || "Unknown",
+  user_avatar: m.profiles?.avatar_url || null,
+  role: m.role,
+  joined_at: m.joined_at,
+  online: false,
+}));
 }, []);
 
-  const getMessages = useCallback(async (roomId: string) => {
-    const { data, error } = await supabase
-      .from('messages')
-      .select(`
-        id, room_id, user_id, content, created_at,
-        user:profiles!messages_user_id_fkey(name, avatar_url)
-      `)
-      .eq('room_id', roomId).order('created_at', { ascending: true }).limit(100);
-    if (error) throw { message: error.message };
-    return (data || []).map((m: Record<string, unknown>) => {
-      const user = m.profiles as Record<string, unknown> | null;
-      return {
-        id: m.id as string, room_id: m.room_id as string, user_id: m.user_id as string,
-        user_name: (user?.name as string) || 'Unknown',
-        user_avatar: (user?.avatar_url as string) || null,
-        content: m.content as string, created_at: m.created_at as string,
-      };
-    }) as Message[];
-  }, []);
+const getMessages = useCallback(async (roomId: string) => {
+  const { data, error } = await supabase
+    .from("messages")
+    .select("*")
+    .eq("room_id", roomId)
+    .order("created_at", { ascending: true })
+    .limit(100);
+
+  if (error) throw { message: error.message };
+
+  const userIds = [...new Set((data || []).map((m: any) => m.user_id))];
+
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id,name,avatar_url")
+    .in("id", userIds);
+
+  return (data || []).map((m: any) => {
+    const profile = profiles?.find((p: any) => p.id === m.user_id);
+
+    return {
+      id: m.id,
+      room_id: m.room_id,
+      user_id: m.user_id,
+      user_name: profile?.name || "Unknown",
+      user_avatar: profile?.avatar_url || null,
+      content: m.content,
+      created_at: m.created_at,
+    };
+  }) as Message[];
+}, []);
 
   const getDashboardStats = useCallback(async (): Promise<DashboardStats> => {
     const { data: authData } = await supabase.auth.getUser();

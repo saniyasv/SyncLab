@@ -6,7 +6,15 @@ import { supabase } from '@/lib/supabase';
 import type { Room, RoomMember, Message, WhiteboardShape } from '@/types';
 import type { ApiError } from '@/types';
 import Editor from '@monaco-editor/react';
-import { Stage, Layer, Rect, Circle, Line as KonvaLine, Text as KonvaText } from 'react-konva';
+import {
+Stage,
+Layer,
+Rect,
+Circle,
+Line as KonvaLine,
+Text as KonvaText,
+Transformer,
+} from "react-konva";
 import type Konva from 'konva';
 import {
   ArrowLeft, Users, Code2, PenTool, MessageSquare, Send,
@@ -172,13 +180,64 @@ export default function WorkspacePage() {
 
   /* ---- chat handlers ---- */
   async function sendChat(e: React.FormEvent) {
-    e.preventDefault();
-    if (!chatInput.trim() || !roomId || !user) return;
-    const content = chatInput.trim();
-    setChatInput('');
-    const { error } = await supabase.from('messages').insert({ room_id: roomId, user_id: user.id, content });
-    if (error) setChatInput(content);
+  e.preventDefault();
+
+  if (!chatInput.trim() || !roomId || !user) return;
+
+  const content = chatInput.trim();
+
+  setChatInput("");
+
+  const tempMessage: Message = {
+    id: crypto.randomUUID(),
+    room_id: roomId,
+    user_id: user.id,
+    user_name: user.user_metadata?.name || "You",
+    user_avatar: null,
+    content,
+    created_at: new Date().toISOString(),
+  };
+
+  setMessages((prev) => [...prev, tempMessage]);
+
+  const { data, error } = await supabase
+  .from("messages")
+  .insert({
+    room_id: roomId,
+    user_id: user.id,
+    content,
+  })
+  .select();
+
+console.log("Inserted:", data);
+console.log("Error:", error);
+
+if (!error && data) {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("name, avatar_url")
+    .eq("id", user.id)
+    .single();
+
+  setMessages((prev) => [
+    ...prev,
+    {
+      id: data[0].id,
+      room_id: roomId,
+      user_id: user.id,
+      user_name: profile?.name || "You",
+      user_avatar: profile?.avatar_url || null,
+      content,
+      created_at: data[0].created_at,
+    },
+  ]);
+}
+
+  if (error) {
+    setMessages((prev) => prev.filter((m) => m.id !== tempMessage.id));
+    setChatInput(content);
   }
+}
 
   /* ---- whiteboard handlers ---- */
   function persistShape(shape: WhiteboardShape) {
@@ -388,24 +447,113 @@ export default function WorkspacePage() {
                 >
                   <Layer>
                     {shapes.map((s) => {
-                      if (s.type === 'rect') return (
-                        <Rect key={s.id}
-                          x={Number(s.props.x)} y={Number(s.props.y)}
-                          width={Number(s.props.width)} height={Number(s.props.height)}
-                          fill={String(s.props.fill)} stroke={String(s.props.stroke)}
-                          draggable={tool === 'select'} onClick={() => handleShapeClick(s.id)} />
+  if (s.type === "rect")
+    return (
+      <Rect
+        key={s.id}
+        x={Number(s.props.x)}
+        y={Number(s.props.y)}
+        width={Number(s.props.width)}
+        height={Number(s.props.height)}
+        fill={String(s.props.fill)}
+        stroke={String(s.props.stroke)}
+        draggable={tool === "select"}
+        onClick={() => handleShapeClick(s.id)}
+        onDragEnd={async (e) => {
+          const props = {
+            ...s.props,
+            x: e.target.x(),
+            y: e.target.y(),
+          };
+
+          setShapes((prev) =>
+            prev.map((shape) =>
+              shape.id === s.id ? { ...shape, props } : shape
+            )
+          );
+
+          await supabase
+            .from("whiteboard_shapes")
+            .update({ props })
+            .eq("id", s.id);
+        }}
+  onMouseDown={() => handleShapeClick(s.id)}
+onTap={() => handleShapeClick(s.id)}
+/>
                       );
-                      if (s.type === 'circle') return (
-                        <Circle key={s.id}
-                          x={Number(s.props.x)} y={Number(s.props.y)} radius={Number(s.props.radius)}
-                          fill={String(s.props.fill)} stroke={String(s.props.stroke)}
-                          draggable={tool === 'select'} onClick={() => handleShapeClick(s.id)} />
-                      );
+                       
+ if (s.type === "circle")
+  return (
+    <Circle
+      key={s.id}
+      x={Number(s.props.x)}
+      y={Number(s.props.y)}
+      radius={Number(s.props.radius)}
+      fill={String(s.props.fill)}
+      stroke={String(s.props.stroke)}
+      draggable={tool === "select"}
+      onClick={() => handleShapeClick(s.id)}
+      onMouseDown={() => handleShapeClick(s.id)}
+      onTap={() => handleShapeClick(s.id)}
+      onDragEnd={async (e) => {
+        const props = {
+          ...s.props,
+          x: e.target.x(),
+          y: e.target.y(),
+        };
+
+        setShapes((prev) =>
+          prev.map((shape) =>
+            shape.id === s.id ? { ...shape, props } : shape
+          )
+        );
+
+        await supabase
+          .from("whiteboard_shapes")
+          .update({ props })
+          .eq("id", s.id);
+      }}
+    />
+  );
                       if (s.type === 'text') return (
-                        <KonvaText key={s.id}
-                          x={Number(s.props.x)} y={Number(s.props.y)} text={String(s.props.text)}
-                          fontSize={Number(s.props.fontSize)} fill={String(s.props.fill)}
-                          draggable={tool === 'select'} onClick={() => handleShapeClick(s.id)} />
+                       <KonvaText
+  x={Number(s.props.x)}
+  y={Number(s.props.y)}
+  text={String(s.props.text)}
+  fontSize={Number(s.props.fontSize)}
+  fill={String(s.props.fill)}
+  draggable={tool === "select"}
+
+onClick={() => {
+  if (tool === "select") setSelectedId(s.id);
+  if (tool === "eraser") handleShapeClick(s.id);
+}}
+
+onTap={() => {
+  if (tool === "select") setSelectedId(s.id);
+  if (tool === "eraser") handleShapeClick(s.id);
+}}
+  onDragEnd={async (e) => {
+    const props = {
+      ...s.props,
+      x: e.target.x(),
+      y: e.target.y(),
+    };
+
+    setShapes((prev) =>
+      prev.map((shape) =>
+        shape.id === s.id ? { ...shape, props } : shape
+      )
+    );
+
+    await supabase
+      .from("whiteboard_shapes")
+      .update({ props })
+      .eq("id", s.id);
+  }}
+  onMouseDown={() => handleShapeClick(s.id)}
+onTap={() => handleShapeClick(s.id)}
+/>
                       );
                       if (s.type === 'pen' || s.type === 'line') return (
                         <KonvaLine key={s.id}
