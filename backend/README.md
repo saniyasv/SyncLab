@@ -41,5 +41,6 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 
 ## Migrations
 
-Migrations are applied via the Supabase MCP tool, not raw SQL files.
-The files in `src/migrations/` document what was applied.
+## Migrations
+
+Database migrations are managed through the **Supabase MCP Tool** rather than raw SQL execution. The files in `src/migrations/` provide a version-controlled history of all schema changes applied throughout the development of the project.
